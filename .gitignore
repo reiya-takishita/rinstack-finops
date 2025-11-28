@@ -1,0 +1,25 @@
+# TODO Created by .ignore support plugin (hsz.mobi)
+# Dependency directories
+node_modules/
+
+# logs directory
+logs/
+
+# pnpm
+.pnpm-store
+
+.env
+lemonsour-firebase-credentials.json
+
+Makefile.local.mk
+
+
+# keys
+keys/
+
+tmp
+
+# Generated outputs directory
+outputs/
+dist/
+coverage/

@@ -1,0 +1,83 @@
+version: "3.9"
+
+services:
+  app:
+    platform: linux/amd64
+    build:
+      context: .
+      dockerfile: Dockerfile
+    volumes:
+      - .:/rinstack_base
+    ports:
+      - "7070:7070"
+    networks:
+      - shared_network
+    container_name: backend-rinstack-base
+    command: ["sh", "-c", "pnpm install --frozen-lockfile && pnpm dev"]
+    env_file:
+      - .env
+    environment:
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      - NODE_OPTIONS=--max-old-space-size=8192
+    entrypoint: ["sh", "docker/entrypoint.sh"]
+    deploy:
+      resources:
+        limits:
+          memory: 16G
+        reservations:
+          memory: 12G
+      
+  mysql:
+    platform: linux/amd64
+    image: mysql:8.0.27
+    restart: always
+    ports:
+      - "23306:3306"
+    environment:
+      MYSQL_ROOT_PASSWORD: ${DB_ROOT_PASSWORD}
+      MYSQL_DATABASE: ${DB_NAME}
+      MYSQL_USER: ${DB_USER}
+      MYSQL_PASSWORD: ${DB_PASSWORD}
+      TZ: 'Asia/Tokyo'
+    volumes:
+      - db_data:/var/lib/mysql
+      - ./initdb:/docker-entrypoint-initdb.d
+    networks:
+      - shared_network
+
+  phpmyadmin:
+    platform: linux/amd64
+    image: phpmyadmin:5
+    restart: always
+    depends_on:
+      - mysql
+    ports:
+      - '3001:80'
+    environment:
+      PMA_ARBITRARY: 1
+      PMA_HOSTS: ${DB_HOST}
+      PMA_USER: ${DB_USER}
+      PMA_PASSWORD: ${DB_PASSWORD}
+      MYSQL_ROOT_PASSWORD: ${DB_ROOT_PASSWORD}
+    networks:
+      - shared_network
+
+  redis:
+    image: redis:7-alpine
+    container_name: rinstack-redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis-data:/data
+    command: redis-server --appendonly yes
+    networks:
+      - shared_network
+
+volumes:
+  db_data:
+  redis-data:
+
+networks:
+  shared_network:
+    external: true
