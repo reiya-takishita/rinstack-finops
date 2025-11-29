@@ -10,6 +10,8 @@
     "build": "tsc",
     "typecheck": "tsc --noEmit --pretty",
     "start": "node dist/src/app.js",
+    "cur:worker": "tsx scripts/start_cur_worker.ts",
+    "cur:scheduler": "tsx scripts/start_cur_scheduler.ts",
     "lint": "eslint . --ext .ts --config ./.eslintrc.js"
   },
   "keywords": [],
