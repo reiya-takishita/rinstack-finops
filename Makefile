@@ -24,7 +24,7 @@ seed-undo:
 
 # Sequelize-Auto command to generate models
 auto-models:
-	docker-compose exec app npx sequelize-auto -h mysql -d rinstack_db -u rinstack_user -x rinstack_p@ssw0rd -p 3306 --dialect mysql -c ./config/config.json -o ./src/models -l ts --caseProp c --singularize
+	docker-compose exec app npx sequelize-auto -h mysql -d rinstack_finops_db -u rinstack_user -x rinstack_p@ssw0rd -p 3306 --dialect mysql -c ./config/config.json -o ./src/models -l ts --caseProp c --singularize
 mod-models:
 	docker-compose run --rm app sh -c 'sh scripts/models_mod.sh'
 create-models: auto-models mod-models

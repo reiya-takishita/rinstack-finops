@@ -108,7 +108,7 @@ async function getForeignKeys(sequelize) {
 async function main() {
   const host = process.env.DB_HOST || 'mysql';
   const port = Number(process.env.DB_PORT || 3306);
-  const database = process.env.DB_NAME || 'rinstack_db';
+  const database = process.env.DB_NAME || 'rinstack_finops_db';
   const username = process.env.DB_USER || 'rinstack_user';
   const password = process.env.DB_PASS || 'rinstack_p@ssw0rd';
 

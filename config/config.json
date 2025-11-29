@@ -2,7 +2,7 @@
   "development": {
     "username": "rinstack_user",
     "password": "rinstack_p@ssw0rd",
-    "database": "rinstack_db",
+    "database": "rinstack_finops_db",
     "host": "mysql",
     "dialect": "mysql"
   },
