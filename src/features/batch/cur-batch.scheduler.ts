@@ -3,15 +3,10 @@ import { logInfo } from '../../shared/logger';
 import { CUR_BATCH_JOB_NAMES, curBatchQueue } from './cur-batch.queue';
 
 export const setupCurBatchSchedulers = async () => {
-  const enabled = getEnvVariableWithDefault('CUR_BATCH_SCHEDULER_ENABLED', 'false') === 'true';
+  const fetchCron = getEnvVariableWithDefault('CUR_FETCH_CRON', '*/3 * * * *');
+  const aggregateCron = getEnvVariableWithDefault('CUR_AGGREGATE_CRON', '*/3 * * * *');
 
-  if (!enabled) {
-    logInfo('CUR batch scheduler is disabled by CUR_BATCH_SCHEDULER_ENABLED flag');
-    return;
-  }
-
-  const fetchCron = getEnvVariableWithDefault('CUR_FETCH_CRON', '0 * * * *');
-  const aggregateCron = getEnvVariableWithDefault('CUR_AGGREGATE_CRON', '15 * * * *');
+  logInfo('Registering CUR batch repeatable jobs', { fetchCron, aggregateCron });
 
   await curBatchQueue.add(
     CUR_BATCH_JOB_NAMES.CUR_FETCH,
@@ -35,5 +30,5 @@ export const setupCurBatchSchedulers = async () => {
     },
   );
 
-  logInfo('CUR batch repeatable jobs registered');
+  logInfo('CUR batch repeatable jobs registered', { fetchCron, aggregateCron });
 };
