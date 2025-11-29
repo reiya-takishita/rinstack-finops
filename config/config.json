@@ -3,21 +3,21 @@
     "username": "rinstack_user",
     "password": "rinstack_p@ssw0rd",
     "database": "rinstack_finops_db",
-    "host": "mysql",
+    "host": "finops-mysql",
     "dialect": "mysql"
   },
   "it": {
     "username": "rinstack_user",
     "password": "rinstack_p@ssw0rd",
     "database": "rinstack_db",
-    "host": "mysql",
+    "host": "finops-mysql",
     "dialect": "mysql"
   },
   "test": {
     "username": "test_user",
     "password": "test_p@ssw0rd",
     "database": "test_db",
-    "host": "mysql",
+    "host": "finops-mysql",
     "dialect": "mysql",
     "logging": false
   },

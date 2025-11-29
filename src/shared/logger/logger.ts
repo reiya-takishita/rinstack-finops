@@ -67,6 +67,21 @@ const masking = (data: string) => {
 		'Authorization=Bearer ****',
 	);
 
+	// FinOps: アクセスキーIDをマスク（AKIAで始まる20文字の文字列）
+	masked = masked.replace(
+		/("(accessKeyId|access_key_id)"\s*:\s*)"(AKIA[0-9A-Z]{16})"/gi,
+		(_, prefix, key, value) => {
+			const maskedValue = `${value.substring(0, 4)}****${value.substring(value.length - 4)}`;
+			return `${prefix}"${maskedValue}"`;
+		}
+	);
+
+	// FinOps: シークレットアクセスキーをマスク
+	masked = masked.replace(
+		/("(secretAccessKey|secret_access_key)"\s*:\s*)"[^"]{40,}"/gi,
+		'$1"****"',
+	);
+
 	return masked;
 }
 
