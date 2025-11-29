@@ -7,6 +7,8 @@ import { checkConnection, initializeMasterData, sequelize } from './shared/datab
 import { initModels } from './models/init-models';
 import { logInfo } from './shared/logger';
 import { APP_CONFIG } from './shared/config';
+import { setupCurBatchSchedulers } from './features/batch/cur-batch.scheduler';
+import { startCurBatchWorker } from './features/batch/cur-batch.worker';
 
 const app = express();
 
@@ -83,6 +85,33 @@ const startServer = async () => {
     
     // マスターデータ初期化
     await initializeMasterData();
+
+    // CURバッチワーカーの起動
+    try {
+      logInfo('Starting CUR batch worker...');
+      await startCurBatchWorker();
+      logInfo('CUR batch worker started successfully.');
+    } catch (error) {
+      console.error('Failed to start CUR batch worker:', error);
+      console.error('Error details:', error instanceof Error ? error.stack : String(error));
+      logInfo('Failed to start CUR batch worker (continuing without batch processing)', { 
+        error: error instanceof Error ? error.message : String(error),
+        stack: error instanceof Error ? error.stack : undefined
+      });
+    }
+
+    // CURバッチスケジューラーの起動
+    try {
+      logInfo('Starting CUR batch scheduler...');
+      await setupCurBatchSchedulers();
+      logInfo('CUR batch scheduler started successfully.');
+    } catch (error) {
+      console.error('Failed to start CUR batch scheduler:', error);
+      logInfo('Failed to start CUR batch scheduler (continuing without batch scheduling)', { 
+        error: error instanceof Error ? error.message : String(error),
+        stack: error instanceof Error ? error.stack : undefined
+      });
+    }
     
     app.listen(PORT, () => {
       logInfo(`Server is running on port ${PORT}`);

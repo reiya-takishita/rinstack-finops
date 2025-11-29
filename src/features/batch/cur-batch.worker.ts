@@ -12,9 +12,8 @@ const connection = {
 };
 
 export const startCurBatchWorker = async () => {
-  await checkConnection();
-  initModels(sequelize);
-  logInfo('CUR batch worker: database initialized');
+  // データベース接続とモデル初期化はapp.tsで既に実行済みのため、ここでは実行しない
+  logInfo('CUR batch worker: initializing worker...');
 
   const worker = new Worker(
     CUR_BATCH_QUEUE_NAME,

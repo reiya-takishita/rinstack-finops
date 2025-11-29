@@ -19,7 +19,7 @@ services:
     env_file:
       - .env
     environment:
-      - REDIS_HOST=redis
+      - REDIS_HOST=finops-redis
       - REDIS_PORT=6379
       - NODE_OPTIONS=--max-old-space-size=8192
     entrypoint: ["sh", "docker/entrypoint.sh"]
