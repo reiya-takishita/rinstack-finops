@@ -7,7 +7,7 @@ services:
       context: .
       dockerfile: Dockerfile
     volumes:
-      - .:/rinstack_base
+      - .:/rinstack_finops
     ports:
       - "7071:7070"
     networks:
