@@ -53,7 +53,7 @@ export async function listCurFiles(
       });
 
       const response: ListObjectsV2CommandOutput = await s3Client.send(command);
-      
+
       (response.Contents ?? []).forEach((obj) => {
         if (obj.Key && (obj.Key.endsWith('.csv') || obj.Key.endsWith('.csv.gz'))) {
           keys.push(obj.Key);
@@ -63,10 +63,10 @@ export async function listCurFiles(
       continuationToken = response.IsTruncated ? response.NextContinuationToken : undefined;
     } while (continuationToken);
 
-    logInfo('[CUR S3] Files listed successfully', { 
-      bucketName, 
-      prefix: normalizedPrefix, 
-      count: keys.length 
+    logInfo('[CUR S3] Files listed successfully', {
+      bucketName,
+      prefix: normalizedPrefix,
+      count: keys.length
     });
 
     return keys;
@@ -109,25 +109,25 @@ export async function downloadAndDecompressCurFile(
     if (objectKey.endsWith('.gz')) {
       const decompressed = await gunzip(buffer);
       const content = decompressed.toString('utf-8');
-      
-      logInfo('[CUR S3] File downloaded and decompressed', { 
-        bucketName, 
+
+      logInfo('[CUR S3] File downloaded and decompressed', {
+        bucketName,
         objectKey,
         size: buffer.length,
         decompressedSize: decompressed.length
       });
-      
+
       return content;
     } else {
       // 通常のCSVファイル
       const content = buffer.toString('utf-8');
-      
-      logInfo('[CUR S3] File downloaded', { 
-        bucketName, 
+
+      logInfo('[CUR S3] File downloaded', {
+        bucketName,
         objectKey,
         size: buffer.length
       });
-      
+
       return content;
     }
   } catch (error) {

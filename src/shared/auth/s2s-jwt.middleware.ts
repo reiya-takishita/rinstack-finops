@@ -6,7 +6,7 @@ import { logError, logWarn, createAuthError, AuthErrorCode } from '../logger';
 /**
  * S2S JWT認証ミドルウェア
  * 設計書参照: Finops_MVP_detail_design_v9.md 1.X.2
- * 
+ *
  * rinstack-appからのリクエストのみを受け入れる
  */
 export const requireS2SAuth = (req: Request, res: Response, next: NextFunction): void => {
@@ -78,8 +78,8 @@ export const requireS2SAuth = (req: Request, res: Response, next: NextFunction):
     res.locals.operatorId = `SERVICE:${decoded.client_id}`;
 
     next();
-  } catch (error: any) {
-    if (error.name === 'JsonWebTokenError' || error.name === 'TokenExpiredError') {
+  } catch (error: unknown) {
+    if (error instanceof Error && (error.name === 'JsonWebTokenError' || error.name === 'TokenExpiredError')) {
       logWarn('Invalid S2S JWT token', { error: error.message, path: req.path });
       res.status(401).json({
         error: 'Unauthorized',
@@ -89,11 +89,12 @@ export const requireS2SAuth = (req: Request, res: Response, next: NextFunction):
     }
 
     // カスタムエラーの場合
-    if (error.statusCode) {
-      res.status(error.statusCode).json({
-        error: error.name,
-        message: error.message,
-        code: error.code,
+    if (error && typeof error === 'object' && 'statusCode' in error) {
+      const customError = error as { statusCode?: number; name?: string; message?: string; code?: string };
+      res.status(customError.statusCode || 401).json({
+        error: customError.name || 'Error',
+        message: customError.message || 'Authentication failed',
+        code: customError.code,
       });
       return;
     }

@@ -1,7 +1,7 @@
 import { Request, Response } from 'express';
 import { z } from 'zod';
 import { putSecureParameter } from '../../../shared/aws/parameter-store';
-import { logError, logInfo, createSystemError, SystemErrorCode, createBusinessError, BusinessErrorCode } from '../../../shared/logger';
+import { logError, logInfo } from '../../../shared/logger';
 import FinopsProjectConnection from '../../../models/finops-project-connection';
 
 /**
@@ -63,8 +63,8 @@ export class AwsConnectionController {
         createdAt: connection.created_at ? connection.created_at.toISOString() : new Date().toISOString(),
         updatedAt: connection.updated_at ? connection.updated_at.toISOString() : new Date().toISOString(),
       });
-    } catch (error: any) {
-      logError('Failed to get FinOps connection', { 
+    } catch (error: unknown) {
+      logError('Failed to get FinOps connection', {
         projectId: req.params.projectId,
         errorMessage: error instanceof Error ? error.message : String(error),
         errorStack: error instanceof Error ? error.stack : undefined,
@@ -146,7 +146,7 @@ export class AwsConnectionController {
       const normalizedCurPrefix = curPrefix.endsWith('/') ? curPrefix : `${curPrefix}/`;
 
       // DBに保存または更新
-      const [connection, created] = await FinopsProjectConnection.upsert({
+      const [connection] = await FinopsProjectConnection.upsert({
         project_id: projectId,
         aws_account_id: awsAccountId,
         access_key_id_param_path: accessKeyIdParamPath,
@@ -165,7 +165,9 @@ export class AwsConnectionController {
       });
 
       // メモリクリア（可能な限り早く）
+      // eslint-disable-next-line @typescript-eslint/no-unused-vars
       accessKeyId = null;
+      // eslint-disable-next-line @typescript-eslint/no-unused-vars
       secretAccessKey = null;
 
       // レスポンス（実際のアクセスキーとシークレットアクセスキーは返さない）
@@ -179,20 +181,19 @@ export class AwsConnectionController {
         createdAt: connection.created_at?.toISOString(),
         updatedAt: connection.updated_at?.toISOString(),
       });
-    } catch (error: any) {
-      // メモリクリア
-      accessKeyId = null;
-      secretAccessKey = null;
+    } catch (error: unknown) {
+      // メモリクリア（変数はスコープ外のため削除）
 
       // エラーログには機密情報を含めない
+      const errorMessage = error instanceof Error ? error.message : String(error);
       logError('Failed to save FinOps connection', {
         projectId: req.params.projectId,
         // accessKeyId, secretAccessKey は含めない
-        error: error.message,
+        error: errorMessage,
       });
 
       // エラーレスポンスには詳細情報を含めない
-      if (error.name === 'SequelizeUniqueConstraintError') {
+      if (error instanceof Error && error.name === 'SequelizeUniqueConstraintError') {
         res.status(409).json({
           error: 'Conflict',
           message: 'Connection already exists',

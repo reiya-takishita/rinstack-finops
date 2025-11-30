@@ -16,8 +16,7 @@ interface FinopsProjectConnectionAttributes {
   updated_at?: Date;
 }
 
-interface FinopsProjectConnectionCreationAttributes
-  extends Optional<FinopsProjectConnectionAttributes, 'created_at' | 'updated_at'> {}
+type FinopsProjectConnectionCreationAttributes = Optional<FinopsProjectConnectionAttributes, 'created_at' | 'updated_at'>;
 
 class FinopsProjectConnection
   extends Model<FinopsProjectConnectionAttributes, FinopsProjectConnectionCreationAttributes>

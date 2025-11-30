@@ -1,10 +1,10 @@
 /**
  * CURカラム名マッピング
- * 
+ *
  * 要件定義: cur-batch-requirements.md 2.1.2
- * 
+ *
  * CUR 2.0形式（アンダースコア区切り）のカラム名マッピング
- * 
+ *
  * 注意: `product`カラムはJSON形式で、`product_name`をパースする必要がある
  */
 export const CUR_COLUMN_MAPPING = {

@@ -19,8 +19,7 @@ interface FinopsBillingFileAttributes {
   updated_at?: Date;
 }
 
-interface FinopsBillingFileCreationAttributes
-  extends Optional<FinopsBillingFileAttributes, 'id' | 'created_at' | 'updated_at' | 'billing_period' | 'error_message' | 'object_key_hash'> {}
+type FinopsBillingFileCreationAttributes = Optional<FinopsBillingFileAttributes, 'id' | 'created_at' | 'updated_at' | 'billing_period' | 'error_message' | 'object_key_hash'>;
 
 class FinopsBillingFile
   extends Model<FinopsBillingFileAttributes, FinopsBillingFileCreationAttributes>

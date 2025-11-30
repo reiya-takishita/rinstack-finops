@@ -1,7 +1,5 @@
 import { Worker } from 'bullmq';
 import { getEnvVariableWithDefault } from '../../shared/database/environment';
-import { checkConnection, sequelize } from '../../shared/database';
-import { initModels } from '../../models/init-models';
 import { logError, logInfo } from '../../shared/logger';
 import { CUR_BATCH_JOB_NAMES, CUR_BATCH_QUEUE_NAME } from './cur-batch.queue';
 import { runCurAggregateBatch, runCurFetchBatch, type CurBatchOptions } from './cur-batch.service';

@@ -13,8 +13,7 @@ interface FinopsCostServiceMonthlyAttributes {
   last_updated_at?: Date;
 }
 
-interface FinopsCostServiceMonthlyCreationAttributes
-  extends Optional<FinopsCostServiceMonthlyAttributes, 'last_updated_at'> {}
+type FinopsCostServiceMonthlyCreationAttributes = Optional<FinopsCostServiceMonthlyAttributes, 'last_updated_at'>;
 
 class FinopsCostServiceMonthly
   extends Model<FinopsCostServiceMonthlyAttributes, FinopsCostServiceMonthlyCreationAttributes>

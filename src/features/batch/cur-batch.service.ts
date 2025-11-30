@@ -26,12 +26,12 @@ const AWS_REGION = getEnvVariable('AWS_REGION') || 'ap-northeast-1';
 
 /**
  * S3オブジェクトキーからbillingPeriodを抽出
- * 
+ *
  * 対応パターン:
  * - Hiveパーティション形式:
  *   - reports/cur2-daily-versioned-personal/data/BILLING_PERIOD=2025-11/2025-11-30T01:39:08.326Z-7eff4bd3-559c-4b1f-88ce-0b715856262c/cur2-daily-versioned-personal-00001.csv.gz
  *   - reports/cur2-daily-overwrite-personal/data/BILLING_PERIOD=2025-11/cur2-daily-overwrite-personal-00001.csv.gz
- * 
+ *
  * @param objectKey S3オブジェクトキー（フルパス）
  * @returns billingPeriod (例: "2025-11") または null
  */
@@ -58,7 +58,7 @@ export async function runCurFetchBatch(options: CurBatchOptions = {}): Promise<v
 
   try {
     // 対象プロジェクトの取得
-    const whereCondition: any = {};
+    const whereCondition: Record<string, string> = {};
     if (projectId) {
       whereCondition.project_id = projectId;
     }
@@ -259,7 +259,7 @@ function parseProductName(productStr: string): string {
 
     const productData = JSON.parse(cleaned);
     return productData.product_name || productData.servicename || '';
-  } catch (e) {
+  } catch {
     // JSONパースエラーは無視
     return '';
   }
@@ -287,7 +287,7 @@ function normalizeDate(dateStr: string): string {
       if (!isNaN(dt.getTime())) {
         return dt.toISOString().substring(0, 10);
       }
-    } catch (e) {
+    } catch {
       // パースエラーは無視
     }
   }
@@ -307,8 +307,7 @@ function normalizeDate(dateStr: string): string {
 async function aggregateAndSaveCosts(
   content: string,
   projectId: string,
-  billingPeriod: string,
-  awsAccountId: string
+  billingPeriod: string
 ): Promise<void> {
   // ファイルを行に分割
   const lines = content.split('\n').filter((line) => line.trim());
@@ -341,7 +340,7 @@ async function aggregateAndSaveCosts(
   }
 
   if (productIdx === undefined && productCodeIdx === undefined) {
-    throw new Error(`productカラムまたはproduct_codeカラムが見つかりません`);
+    throw new Error('productカラムまたはproduct_codeカラムが見つかりません');
   }
 
   const [year, month] = billingPeriod.split('-');
@@ -526,7 +525,7 @@ export async function runCurAggregateBatch(options: CurBatchOptions = {}): Promi
 
   try {
     // PENDINGファイルを取得（上限100件）
-    const whereCondition: any = { status: 'PENDING' };
+    const whereCondition: Record<string, string> = { status: 'PENDING' };
     if (projectId) {
       whereCondition.project_id = projectId;
     }
@@ -600,11 +599,11 @@ export async function runCurAggregateBatch(options: CurBatchOptions = {}): Promi
         try {
           const tmpDir = path.join(process.cwd(), 'tmp', 'cur-decompressed', file.project_id, billingPeriod);
           await fs.mkdir(tmpDir, { recursive: true });
-          
+
           // ファイル名を生成（.gzを除去）
           const fileName = path.basename(file.object_key).replace(/\.gz$/, '');
           const tmpFilePath = path.join(tmpDir, fileName);
-          
+
           await fs.writeFile(tmpFilePath, content, 'utf-8');
           logInfo('[Batch B] 解凍後のファイルをtmpに保存', {
             fileId: file.id,
@@ -623,8 +622,7 @@ export async function runCurAggregateBatch(options: CurBatchOptions = {}): Promi
         await aggregateAndSaveCosts(
           content,
           file.project_id,
-          billingPeriod,
-          file.aws_account_id
+          billingPeriod
         );
 
         // ステータスをDONEに更新

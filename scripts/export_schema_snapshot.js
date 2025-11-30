@@ -160,14 +160,14 @@ async function main() {
   // Write schema.json
   fs.writeFileSync(path.join(outDir, 'schema.json'), JSON.stringify(result, null, 2));
 
-  // eslint-disable-next-line no-console
+   
   console.log('Schema snapshot written to', path.relative(PROJECT_ROOT, outDir));
 
   await sequelize.close();
 }
 
 main().catch(err => {
-  // eslint-disable-next-line no-console
+   
   console.error(err);
   process.exit(1);
 });

@@ -15,8 +15,7 @@ interface FinopsCostSummaryAttributes {
   last_updated_at?: Date;
 }
 
-interface FinopsCostSummaryCreationAttributes
-  extends Optional<FinopsCostSummaryAttributes, 'last_updated_at'> {}
+type FinopsCostSummaryCreationAttributes = Optional<FinopsCostSummaryAttributes, 'last_updated_at'>;
 
 class FinopsCostSummary
   extends Model<FinopsCostSummaryAttributes, FinopsCostSummaryCreationAttributes>

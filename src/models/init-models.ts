@@ -7,7 +7,8 @@ import FinopsCostServiceMonthly from './finops-cost-service-monthly';
 /**
  * FinOpsモデルの初期化
  */
-export function initModels(sequelize: Sequelize) {
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
+export function initModels(_sequelize: Sequelize) {
   // モデルを初期化（既にinit()でsequelizeに登録済み）
   // ここでは型チェックとエクスポートのために関連付けを返す
   return {

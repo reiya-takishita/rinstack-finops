@@ -69,16 +69,16 @@ async function dumpOneTable(conn, dbName, table) {
   const columnsForOutput = fallbackCols.length ? fallbackCols : Object.keys(rows[0]).sort();
 
   // テーブル見出し（diffしやすいように簡潔に）
-  // eslint-disable-next-line no-console
+   
   console.log(`## table: ${table} rows=${rows.length}`);
   for (const r of rows) {
     const obj = projectRowWithOrder(r, columnsForOutput);
     // JSON Lines（キー順は挿入順で安定）
-    // eslint-disable-next-line no-console
+     
     console.log(JSON.stringify(obj));
   }
   // テーブル間の区切り
-  // eslint-disable-next-line no-console
+   
   console.log('');
   return rows.length;
 }
@@ -113,7 +113,7 @@ async function main() {
 
 if (require.main === module) {
   main().catch((err) => {
-    // eslint-disable-next-line no-console
+     
     console.error(err);
     process.exit(1);
   });

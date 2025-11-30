@@ -4,7 +4,7 @@ import { CUR_BATCH_JOB_NAMES, curBatchQueue } from './cur-batch.queue';
 
 /**
  * CURバッチスケジューラーの設定
- * 
+ *
  * 要件定義: cur-batch-requirements.md 4.2, 4.3
  * - Batch Aのみ定期実行（CUR_FETCH_CRON）
  * - Batch Bは定期実行しない（Batch Aから動的に登録される）

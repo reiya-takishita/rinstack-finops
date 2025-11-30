@@ -77,4 +77,4 @@ export {
   checkConnection,
   syncDatabase,
   closeConnection,
-}; 
+};

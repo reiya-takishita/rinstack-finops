@@ -9,7 +9,7 @@ export class ControllerRegistry {
     return this.map.get(key);
   }
 
-  abort(key: string, reason?: any): boolean {
+  abort(key: string, reason?: unknown): boolean {
     const c = this.map.get(key);
     if (!c) return false;
     try {

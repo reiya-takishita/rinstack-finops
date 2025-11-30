@@ -41,55 +41,55 @@ const formatTokyoTimestamp = (): string => {
 
 // 秘匿性のある情報に対してマスクする
 const masking = (data: string) => {
-	let masked = data;
+  let masked = data;
 
-	// JSON 形式のシークレット値をマスク
-	masked = masked.replace(
-		/("(password|client_secret|access_token|refresh_token|api_key)"\s*:\s*)"[^"]*"/gi,
-		'$1"****"',
-	);
+  // JSON 形式のシークレット値をマスク
+  masked = masked.replace(
+    /("(password|client_secret|access_token|refresh_token|api_key)"\s*:\s*)"[^"]*"/gi,
+    '$1"****"',
+  );
 
-	// x-www-form-urlencoded 形式のシークレット値をマスク
-	masked = masked.replace(
-		/\b(password|client_secret|access_token|refresh_token|api_key)\s*=\s*[^&\s]*/gi,
-		'$1=****',
-	);
+  // x-www-form-urlencoded 形式のシークレット値をマスク
+  masked = masked.replace(
+    /\b(password|client_secret|access_token|refresh_token|api_key)\s*=\s*[^&\s]*/gi,
+    '$1=****',
+  );
 
-	// JSON 形式の Authorization: Bearer をマスク
-	masked = masked.replace(
-		/("Authorization"\s*:\s*")((?:Bearer|Token|Basic)\s+)[^"]*(")/gi,
-		'$1$2****$3',
-	);
+  // JSON 形式の Authorization: Bearer をマスク
+  masked = masked.replace(
+    /("Authorization"\s*:\s*")((?:Bearer|Token|Basic)\s+)[^"]*(")/gi,
+    '$1$2****$3',
+  );
 
-	// x-www-form-urlencoded 形式の Authorization をマスク
-	masked = masked.replace(
-		/\bAuthorization\s*=\s*(?:Bearer|Token|Basic)\s+[^&\s]*/gi,
-		'Authorization=Bearer ****',
-	);
+  // x-www-form-urlencoded 形式の Authorization をマスク
+  masked = masked.replace(
+    /\bAuthorization\s*=\s*(?:Bearer|Token|Basic)\s+[^&\s]*/gi,
+    'Authorization=Bearer ****',
+  );
 
-	// FinOps: アクセスキーIDをマスク（AKIAで始まる20文字の文字列）
-	masked = masked.replace(
-		/("(accessKeyId|access_key_id)"\s*:\s*)"(AKIA[0-9A-Z]{16})"/gi,
-		(_, prefix, key, value) => {
-			const maskedValue = `${value.substring(0, 4)}****${value.substring(value.length - 4)}`;
-			return `${prefix}"${maskedValue}"`;
-		}
-	);
+  // FinOps: アクセスキーIDをマスク（AKIAで始まる20文字の文字列）
+  masked = masked.replace(
+    /("(accessKeyId|access_key_id)"\s*:\s*)"(AKIA[0-9A-Z]{16})"/gi,
+    (_, prefix, key, value) => {
+      const maskedValue = `${value.substring(0, 4)}****${value.substring(value.length - 4)}`;
+      return `${prefix}"${maskedValue}"`;
+    }
+  );
 
-	// FinOps: シークレットアクセスキーをマスク
-	masked = masked.replace(
-		/("(secretAccessKey|secret_access_key)"\s*:\s*)"[^"]{40,}"/gi,
-		'$1"****"',
-	);
+  // FinOps: シークレットアクセスキーをマスク
+  masked = masked.replace(
+    /("(secretAccessKey|secret_access_key)"\s*:\s*)"[^"]{40,}"/gi,
+    '$1"****"',
+  );
 
-	return masked;
+  return masked;
 }
 
 // シンプルなログ出力関数
-const formatMessage = (level: string, message: string, data?: any) => {
+const formatMessage = (level: string, message: string, data?: unknown) => {
   const timestamp = formatTokyoTimestamp();
   const dataStr = data ? ` ${masking(JSON.stringify(data))}` : '';
-  
+
   if (isDevelopment) {
     const levelColor = levelColors[level as keyof typeof levelColors] || colors.white;
     const timestampColor = colors.gray;
@@ -100,31 +100,31 @@ const formatMessage = (level: string, message: string, data?: any) => {
 };
 
 // ログ出力関数
-export const logInfo = (message: string, data?: any) => {
+export const logInfo = (message: string, data?: unknown) => {
   console.log(formatMessage('info', message, data));
 };
 
-export const logError = (message: string, error?: any) => {
+export const logError = (message: string, error?: unknown) => {
   console.error(formatMessage('error', message, error));
 };
 
-export const logWarn = (message: string, data?: any) => {
+export const logWarn = (message: string, data?: unknown) => {
   console.warn(formatMessage('warn', message, data));
 };
 
-export const logDebug = (message: string, data?: any) => {
+export const logDebug = (message: string, data?: unknown) => {
   if (isDevelopment) {
     console.debug(formatMessage('debug', message, data));
   }
 };
 
-export const logTrace = (message: string, data?: any) => {
+export const logTrace = (message: string, data?: unknown) => {
   if (isDevelopment) {
     console.trace(formatMessage('trace', message, data));
   }
 };
 
-export const logFatal = (message: string, error?: any) => {
+export const logFatal = (message: string, error?: unknown) => {
   console.error(formatMessage('fatal', message, error));
 };
 
@@ -167,13 +167,14 @@ export enum BusinessErrorCode {
 
 // エラーファクトリー（console.logベース）
 const mockLogger = {
-  error: (error: any, message: string) => logError(message, error),
-  warn: (data: any, message: string) => logWarn(message, data),
-  info: (data: any, message: string) => logInfo(message, data),
+  error: (error: unknown, message: string) => logError(message, error),
+  warn: (data: unknown, message: string) => logWarn(message, data),
+  info: (data: unknown, message: string) => logInfo(message, data),
 };
 
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
 const { createAuthError, createSystemError, createBusinessError } = createErrorFactory(mockLogger as any);
 
 export { createAuthError, createSystemError, createBusinessError };
 
-export default mockLogger;  
+export default mockLogger;
