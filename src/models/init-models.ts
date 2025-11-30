@@ -1,12 +1,20 @@
 import type { Sequelize } from 'sequelize';
+import FinopsProjectConnection from './finops-project-connection';
+import FinopsBillingFile from './finops-billing-file';
+import FinopsCostSummary from './finops-cost-summary';
+import FinopsCostServiceMonthly from './finops-cost-service-monthly';
 
 /**
- * ベースリポジトリ用のプレースホルダ。
- * 各 rinstack-* プロジェクトで Sequelize モデルを定義し、
- * この関数内で initModel を呼び出す実装に差し替える想定。
+ * FinOpsモデルの初期化
  */
-export function initModels(_sequelize: Sequelize) {
-  // プロジェクト固有のモデル初期化は各リポジトリ側で実装してください。
-  return {};
+export function initModels(sequelize: Sequelize) {
+  // モデルを初期化（既にinit()でsequelizeに登録済み）
+  // ここでは型チェックとエクスポートのために関連付けを返す
+  return {
+    FinopsProjectConnection,
+    FinopsBillingFile,
+    FinopsCostSummary,
+    FinopsCostServiceMonthly,
+  };
 }
 

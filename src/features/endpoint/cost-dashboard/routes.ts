@@ -1,68 +1,176 @@
 import express, { Router } from 'express';
+import FinopsCostSummary from '../../../models/finops-cost-summary';
+import FinopsCostServiceMonthly from '../../../models/finops-cost-service-monthly';
+import { logError } from '../../../shared/logger';
 
 const router = Router();
 
-router.get('/projects/:projectId/dashboard/summary', (req: express.Request, res: express.Response) => {
+/**
+ * GET /finops/projects/:projectId/dashboard/summary
+ * 月次サマリ情報を取得
+ */
+router.get('/projects/:projectId/dashboard/summary', async (req: express.Request, res: express.Response) => {
   const { projectId } = req.params;
 
-  res.json({
-    projectId,
-    billingPeriod: '2025-11',
-    totalCost: 154345,
-    executedActionsCount: 0,
-    optimizationProposalsCount: 0,
-    forecastCost: 172159,
-    previousSamePeriodCost: 158975,
-    previousMonthTotalCost: 203164,
-    costReducedByActions: 0,
-    lastUpdatedAt: '2025-11-29T12:34:56Z',
-  });
+  try {
+    // 最新のbillingPeriodを取得
+    const latestSummary = await FinopsCostSummary.findOne({
+      where: { project_id: projectId },
+      order: [['billing_period', 'DESC']],
+    });
+
+    if (!latestSummary) {
+      return res.status(404).json({
+        error: 'NOT_FOUND',
+        message: 'コストデータが見つかりません',
+      });
+    }
+
+    res.json({
+      projectId: latestSummary.project_id,
+      billingPeriod: latestSummary.billing_period,
+      totalCost: Number(latestSummary.total_cost),
+      executedActionsCount: 0, // MVPでは固定値
+      optimizationProposalsCount: 0, // MVPでは固定値
+      forecastCost: Number(latestSummary.forecast_cost),
+      previousSamePeriodCost: Number(latestSummary.previous_same_period_cost),
+      previousMonthTotalCost: Number(latestSummary.previous_month_total_cost),
+      costReducedByActions: 0, // MVPでは固定値
+      lastUpdatedAt: latestSummary.last_updated_at.toISOString(),
+    });
+  } catch (error) {
+    logError('[cost-dashboard] summary取得エラー', { projectId, error });
+    res.status(500).json({
+      error: 'INTERNAL_ERROR',
+      message: 'サーバーエラーが発生しました',
+    });
+  }
 });
 
-router.get('/projects/:projectId/dashboard/services-monthly', (req: express.Request, res: express.Response) => {
+/**
+ * GET /finops/projects/:projectId/dashboard/services-monthly
+ * サービス別月次コストを取得
+ */
+router.get('/projects/:projectId/dashboard/services-monthly', async (req: express.Request, res: express.Response) => {
   const { projectId } = req.params;
 
-  res.json({
-    projectId,
-    months: ['2025-04', '2025-05', '2025-06', '2025-07', '2025-08', '2025-09', '2025-10', '2025-11'],
-    services: [
-      {
-        serviceName: 'Amazon Simple Storage Service',
-        costs: [52156, 57318, 48611, 63910, 52148, 66151, 48215, 37910],
-      },
-      {
-        serviceName: 'Amazon Elastic Container Service',
-        costs: [66236, 77341, 58125, 80214, 88341, 73913, 148461, 92314],
-      },
-      {
-        serviceName: 'Amazon Cloud Front',
-        costs: [21109, 22546, 22325, 21943, 22001, 22114, 22164, 21119],
-      },
-    ],
-  });
+  try {
+    // 全期間のサービス別データを取得
+    const serviceMonthlyData = await FinopsCostServiceMonthly.findAll({
+      where: { project_id: projectId },
+      order: [['billing_period', 'ASC']],
+    });
+
+    if (serviceMonthlyData.length === 0) {
+      return res.status(404).json({
+        error: 'NOT_FOUND',
+        message: 'コストデータが見つかりません',
+      });
+    }
+
+    // 月の一覧を取得（重複除去・ソート）
+    const monthsSet = new Set<string>();
+    serviceMonthlyData.forEach((d) => {
+      if (d.billing_period) monthsSet.add(d.billing_period);
+    });
+    const months = Array.from(monthsSet).sort();
+
+    // サービス名の一覧を取得
+    const serviceNamesSet = new Set<string>();
+    serviceMonthlyData.forEach((d) => {
+      if (d.service_name) serviceNamesSet.add(d.service_name);
+    });
+    const serviceNames = Array.from(serviceNamesSet).sort();
+
+    // サービス別に月次コストを集計
+    const services = serviceNames.map((serviceName) => {
+      const costs = months.map((month) => {
+        const data = serviceMonthlyData.find(
+          (d) => d.billing_period === month && d.service_name === serviceName
+        );
+        return data ? Number(data.cost) : 0;
+      });
+      return {
+        serviceName,
+        costs,
+      };
+    });
+
+    res.json({
+      projectId,
+      months,
+      services,
+    });
+  } catch (error) {
+    logError('[cost-dashboard] services-monthly取得エラー', { projectId, error });
+    res.status(500).json({
+      error: 'INTERNAL_ERROR',
+      message: 'サーバーエラーが発生しました',
+    });
+  }
 });
 
-router.get('/projects/:projectId/dashboard/history', (req: express.Request, res: express.Response) => {
+/**
+ * GET /finops/projects/:projectId/dashboard/history
+ * 履歴データを取得（services-monthlyと同じデータを異なる形式で返す）
+ */
+router.get('/projects/:projectId/dashboard/history', async (req: express.Request, res: express.Response) => {
   const { projectId } = req.params;
 
-  res.json({
-    projectId,
-    months: ['2025-04', '2025-05', '2025-06', '2025-07', '2025-08', '2025-09', '2025-10', '2025-11'],
-    rows: [
-      {
-        serviceName: 'Simple Storage Service',
-        monthlyCosts: [52156, 57318, 48611, 63910, 52148, 66151, 48215, 37910],
-      },
-      {
-        serviceName: 'Elastic Container Service',
-        monthlyCosts: [66236, 77341, 58125, 80214, 88341, 73913, 148461, 92314],
-      },
-      {
-        serviceName: 'Cloud Front',
-        monthlyCosts: [21109, 22546, 22325, 21943, 22001, 22114, 22164, 21119],
-      },
-    ],
-  });
+  try {
+    // services-monthlyと同じロジックでデータを取得
+    const serviceMonthlyData = await FinopsCostServiceMonthly.findAll({
+      where: { project_id: projectId },
+      order: [['billing_period', 'ASC']],
+    });
+
+    if (serviceMonthlyData.length === 0) {
+      return res.status(404).json({
+        error: 'NOT_FOUND',
+        message: 'コストデータが見つかりません',
+      });
+    }
+
+    // 月の一覧を取得
+    const monthsSet = new Set<string>();
+    serviceMonthlyData.forEach((d) => {
+      if (d.billing_period) monthsSet.add(d.billing_period);
+    });
+    const months = Array.from(monthsSet).sort();
+
+    // サービス名の一覧を取得
+    const serviceNamesSet = new Set<string>();
+    serviceMonthlyData.forEach((d) => {
+      if (d.service_name) serviceNamesSet.add(d.service_name);
+    });
+    const serviceNames = Array.from(serviceNamesSet).sort();
+
+    // 履歴形式に変換
+    const rows = serviceNames.map((serviceName) => {
+      const monthlyCosts = months.map((month) => {
+        const data = serviceMonthlyData.find(
+          (d) => d.billing_period === month && d.service_name === serviceName
+        );
+        return data ? Number(data.cost) : 0;
+      });
+      return {
+        serviceName,
+        monthlyCosts,
+      };
+    });
+
+    res.json({
+      projectId,
+      months,
+      rows,
+    });
+  } catch (error) {
+    logError('[cost-dashboard] history取得エラー', { projectId, error });
+    res.status(500).json({
+      error: 'INTERNAL_ERROR',
+      message: 'サーバーエラーが発生しました',
+    });
+  }
 });
 
 export default router;
