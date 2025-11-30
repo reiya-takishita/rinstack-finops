@@ -3,24 +3,21 @@
  * 
  * 要件定義: cur-batch-requirements.md 2.1.2
  * 
- * 実装方針:
- * - CUR 1.0形式（スラッシュ区切り）で実装予定
- * - 将来CUR 2.0形式（アンダースコア区切り）への置換を容易にするため、マッピングを定義
+ * CUR 2.0形式（アンダースコア区切り）のカラム名マッピング
  * 
- * 注意: モックデータはCUR 2.0形式のため、一時的にCUR 2.0形式のマッピングを使用
+ * 注意: `product`カラムはJSON形式で、`product_name`をパースする必要がある
  */
 export const CUR_COLUMN_MAPPING = {
-  // CUR 1.0形式（将来の実装）
-  // USAGE_START_DATE: 'lineItem/UsageStartDate',
-  // UNBLENDED_COST: 'lineItem/UnblendedCost',
-  // USAGE_AMOUNT: 'lineItem/UsageAmount',
-  // PRODUCT_NAME: 'product/ProductName',
-
-  // CUR 2.0形式（モックデータ用・一時的）
   USAGE_START_DATE: 'line_item_usage_start_date',
   UNBLENDED_COST: 'line_item_unblended_cost',
+  NET_UNBLENDED_COST: 'line_item_net_unblended_cost', // クレジット適用後のコスト（優先的に使用）
   USAGE_AMOUNT: 'line_item_usage_amount',
-  PRODUCT_NAME: 'product_product_name',
+  PRODUCT: 'product', // JSON形式のカラム（product_nameを含む）
+  PRODUCT_CODE: 'line_item_product_code', // フォールバック用
+  LINE_ITEM_TYPE: 'line_item_line_item_type', // Usage, Tax, Credit, Refundなど
+  USAGE_ACCOUNT_ID: 'line_item_usage_account_id', // 使用量が発生したAWSアカウントID
+  RESERVATION_EFFECTIVE_COST: 'reservation_effective_cost', // 予約インスタンスの有効コスト
+  SAVINGS_PLAN_EFFECTIVE_COST: 'savings_plan_savings_plan_effective_cost', // Savings Planの有効コスト
 } as const;
 
 export type CurColumnMappingKey = keyof typeof CUR_COLUMN_MAPPING;
