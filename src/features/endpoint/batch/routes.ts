@@ -1,5 +1,5 @@
 import express, { Router } from 'express';
-import { enqueueCurAggregateJob, enqueueCurFetchJob } from '../../batch/cur-batch.queue';
+import { triggerCurAggregateBatch, triggerCurFetchBatch } from './batch.service';
 
 const router = Router();
 
@@ -9,14 +9,9 @@ router.post('/projects/:projectId/batch/cur-fetch', async (req: express.Request,
 
   // TODO: 認可・バリデーションなどが必要になったらここで実装する
 
-  const job = await enqueueCurFetchJob({ projectId });
+  const result = await triggerCurFetchBatch(projectId);
 
-  res.json({
-    projectId,
-    status: 'accepted',
-    message: 'CUR fetch batch is triggered.',
-    jobId: job.id,
-  });
+  res.json(result);
 });
 
 // CUR 解析・集計バッチをオンデマンドで実行するエンドポイント
@@ -25,14 +20,9 @@ router.post('/projects/:projectId/batch/cur-aggregate', async (req: express.Requ
 
   // TODO: 認可・バリデーションなどが必要になったらここで実装する
 
-  const job = await enqueueCurAggregateJob({ projectId });
+  const result = await triggerCurAggregateBatch(projectId);
 
-  res.json({
-    projectId,
-    status: 'accepted',
-    message: 'CUR aggregate batch is triggered.',
-    jobId: job.id,
-  });
+  res.json(result);
 });
 
 export default router;

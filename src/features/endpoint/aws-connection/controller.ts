@@ -1,8 +1,10 @@
 import { Request, Response } from 'express';
 import { z } from 'zod';
-import { putSecureParameter } from '../../../shared/aws/parameter-store';
-import { logError, logInfo } from '../../../shared/logger';
-import FinopsProjectConnection from '../../../models/finops-project-connection';
+import { logError } from '../../../shared/logger';
+import {
+  getAwsConnection,
+  saveAwsConnection,
+} from './aws-connection.service';
 
 /**
  * FinOps接続設定のリクエストスキーマ
@@ -42,7 +44,7 @@ export class AwsConnectionController {
       }
 
       // DBから接続設定を取得
-      const connection = await FinopsProjectConnection.findByPk(projectId);
+      const connection = await getAwsConnection(projectId);
 
       if (!connection) {
         res.status(404).json({
@@ -51,18 +53,8 @@ export class AwsConnectionController {
         });
         return;
       }
-
       // レスポンス（機密情報は含めない）
-      res.status(200).json({
-        projectId: connection.project_id,
-        awsAccountId: connection.aws_account_id,
-        accessKeyIdParamPath: connection.access_key_id_param_path,
-        secretAccessKeyParamPath: connection.secret_access_key_param_path,
-        curBucketName: connection.cur_bucket_name,
-        curPrefix: connection.cur_prefix,
-        createdAt: connection.created_at ? connection.created_at.toISOString() : new Date().toISOString(),
-        updatedAt: connection.updated_at ? connection.updated_at.toISOString() : new Date().toISOString(),
-      });
+      res.status(200).json(connection);
     } catch (error: unknown) {
       logError('Failed to get FinOps connection', {
         projectId: req.params.projectId,
@@ -125,43 +117,15 @@ export class AwsConnectionController {
         return;
       }
 
-      // Parameter Storeのパスを生成（organizationIdを含める）
-      const accessKeyIdParamPath = `/rinstack/finops/${organizationId}/${projectId}/access-key-id`;
-      const secretAccessKeyParamPath = `/rinstack/finops/${organizationId}/${projectId}/secret-access-key`;
-
-      // Parameter Storeにアクセスキーとシークレットアクセスキーを保存
       // 設計書準拠（パターンB）: FinOpsコンテナがParameter Storeを管理
-      await putSecureParameter(
-        accessKeyIdParamPath,
-        accessKeyIdValue,
-        `FinOps AWS Access Key ID for project ${projectId}`
-      );
-      await putSecureParameter(
-        secretAccessKeyParamPath,
-        secretAccessKeyValue,
-        `FinOps AWS Secret Access Key for project ${projectId}`
-      );
-
-      // curPrefixの末尾スラッシュを統一（末尾に付加）
-      const normalizedCurPrefix = curPrefix.endsWith('/') ? curPrefix : `${curPrefix}/`;
-
-      // DBに保存または更新
-      const [connection] = await FinopsProjectConnection.upsert({
-        project_id: projectId,
-        aws_account_id: awsAccountId,
-        access_key_id_param_path: accessKeyIdParamPath,
-        secret_access_key_param_path: secretAccessKeyParamPath,
-        cur_bucket_name: curBucketName,
-        cur_prefix: normalizedCurPrefix,
-      }, {
-        returning: true,
-      });
-
-      logInfo('FinOps connection saved', {
+      const connection = await saveAwsConnection({
         projectId,
+        organizationId,
         awsAccountId,
+        accessKeyId: accessKeyIdValue,
+        secretAccessKey: secretAccessKeyValue,
         curBucketName,
-        // 機密情報は含めない
+        curPrefix,
       });
 
       // メモリクリア（可能な限り早く）
@@ -171,16 +135,7 @@ export class AwsConnectionController {
       secretAccessKey = null;
 
       // レスポンス（実際のアクセスキーとシークレットアクセスキーは返さない）
-      res.status(200).json({
-        projectId: connection.project_id,
-        awsAccountId: connection.aws_account_id,
-        accessKeyIdParamPath: connection.access_key_id_param_path,
-        secretAccessKeyParamPath: connection.secret_access_key_param_path,
-        curBucketName: connection.cur_bucket_name,
-        curPrefix: connection.cur_prefix,
-        createdAt: connection.created_at?.toISOString(),
-        updatedAt: connection.updated_at?.toISOString(),
-      });
+      res.status(200).json(connection);
     } catch (error: unknown) {
       // メモリクリア（変数はスコープ外のため削除）
 

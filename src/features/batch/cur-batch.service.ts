@@ -9,11 +9,18 @@ import * as crypto from 'crypto';
 import { promises as fs } from 'fs';
 import * as path from 'path';
 import { logInfo, logError } from '../../shared/logger';
-import FinopsProjectConnection from '../../models/finops-project-connection';
-import FinopsBillingFile from '../../models/finops-billing-file';
-import FinopsCostSummary from '../../models/finops-cost-summary';
-import FinopsCostServiceMonthly from '../../models/finops-cost-service-monthly';
-import { sequelize } from '../../shared/database/connection';
+import {
+  findTargetProjectConnectionsForCurBatch,
+  findBillingFileByObjectKeyHashForCurBatch,
+  createBillingFileForCurBatch,
+  findPendingBillingFilesForCurBatch,
+  lockBillingFileAsProcessingForCurBatch,
+  updateBillingFileStatusToDoneForCurBatch,
+  updateBillingFileStatusToErrorForCurBatch,
+  findProjectConnectionByProjectIdForCurBatch,
+  getExistingServiceCostsForCurBatch,
+  saveCurAggregatedCostsForCurBatch,
+} from './cur-batch.repository';
 import { enqueueCurAggregateJob } from './cur-batch.queue';
 import { getSecureParameter } from '../../shared/aws/parameter-store';
 import { createCurS3Client, listCurFiles, downloadAndDecompressCurFile } from '../../shared/aws/cur-s3-operations';
@@ -59,14 +66,7 @@ export async function runCurFetchBatch(options: CurBatchOptions = {}): Promise<v
 
   try {
     // 対象プロジェクトの取得
-    const whereCondition: Record<string, string> = {};
-    if (projectId) {
-      whereCondition.project_id = projectId;
-    }
-
-    const connections = await FinopsProjectConnection.findAll({
-      where: whereCondition,
-    });
+    const connections = await findTargetProjectConnectionsForCurBatch(projectId);
 
     if (connections.length === 0) {
       logInfo('[Batch A] 対象プロジェクトが見つかりません', { projectId });
@@ -113,24 +113,21 @@ export async function runCurFetchBatch(options: CurBatchOptions = {}): Promise<v
           const billingPeriod = extractBillingPeriod(objectKey);
 
           // 既存レコードをチェック
-          const existing = await FinopsBillingFile.findOne({
-            where: {
-              project_id: connection.project_id,
-              bucket_name: connection.cur_bucket_name,
-              object_key_hash: objectKeyHash,
-            },
-          });
+          const existing = await findBillingFileByObjectKeyHashForCurBatch(
+            connection.project_id,
+            connection.cur_bucket_name,
+            objectKeyHash,
+          );
 
           if (!existing) {
             // 新規登録
-            await FinopsBillingFile.create({
-              project_id: connection.project_id,
-              aws_account_id: connection.aws_account_id,
-              bucket_name: connection.cur_bucket_name,
-              object_key: objectKey,
-              object_key_hash: objectKeyHash,
-              billing_period: billingPeriod,
-              status: 'PENDING',
+            await createBillingFileForCurBatch({
+              projectId: connection.project_id,
+              awsAccountId: connection.aws_account_id,
+              bucketName: connection.cur_bucket_name,
+              objectKey,
+              objectKeyHash,
+              billingPeriod,
             });
 
             newFiles.push(objectKey);
@@ -352,18 +349,7 @@ async function aggregateAndSaveCosts(
   const billingMonth = parseInt(month, 10);
 
   // 既存のサービス別コストを読み込む（複数ファイル対応）
-  const existingServices = await FinopsCostServiceMonthly.findAll({
-    where: {
-      project_id: projectId,
-      billing_period: billingPeriod,
-    },
-  });
-
-  // 集計用のデータ構造（既存データから初期化）
-  const serviceCosts: Record<string, number> = {};
-  for (const existing of existingServices) {
-    serviceCosts[existing.service_name] = Number(existing.cost) || 0;
-  }
+  const serviceCosts = await getExistingServiceCostsForCurBatch(projectId, billingPeriod);
   const dailyCosts: Record<string, number> = {}; // 日別コスト（予測用）
   let currencyCode = '';
 
@@ -447,96 +433,17 @@ async function aggregateAndSaveCosts(
     }
   }
 
-  // サービス別コストの合計を計算
-  const calculatedTotalCost = Object.values(serviceCosts).reduce((sum, cost) => sum + cost, 0);
-
-  await sequelize.transaction(async (t) => {
-    // 対象プロジェクト・対象月のサービス別コストを一括削除
-    await FinopsCostServiceMonthly.destroy({
-      where: {
-        project_id: projectId,
-        billing_period: billingPeriod,
-      },
-      transaction: t,
-    });
-
-    // finops_cost_service_monthlyに一括INSERT
-    const now = new Date();
-    const serviceRows = Object.entries(serviceCosts).map(([serviceName, cost]) => ({
-      project_id: projectId,
-      billing_period: billingPeriod,
-      service_name: serviceName,
-      currency: currencyCode,
-      cost,
-      last_updated_at: now,
-    }));
-
-    if (serviceRows.length > 0) {
-      await FinopsCostServiceMonthly.bulkCreate(serviceRows, { transaction: t });
-    }
-
-    // 既存のサマリーを取得
-    const existingSummary = await FinopsCostSummary.findOne({
-      where: {
-        project_id: projectId,
-        billing_period: billingPeriod,
-      },
-      transaction: t,
-    });
-
-    // 予測コストを計算（本日までの平均日次コスト × 当月の日数）
-    const today = new Date();
-    const currentYear = today.getFullYear();
-    const currentMonth = today.getMonth() + 1;
-    const isCurrentMonth = billingYear === currentYear && billingMonth === currentMonth;
-
-    let forecastCost = calculatedTotalCost;
-    if (isCurrentMonth) {
-      const daysInMonth = new Date(billingYear, billingMonth, 0).getDate();
-      const daysSoFar = Object.keys(dailyCosts).length;
-      if (daysSoFar > 0) {
-        const avgDailyCost = calculatedTotalCost / daysSoFar;
-        forecastCost = avgDailyCost * daysInMonth;
-      } else if (existingSummary) {
-        forecastCost = Number(existingSummary.forecast_cost) || calculatedTotalCost;
-      }
-    } else if (existingSummary) {
-      // 過去月の場合は既存の予測コストを維持
-      forecastCost = Number(existingSummary.forecast_cost) || calculatedTotalCost;
-    }
-
-    // 前月のデータを取得
-    const prevMonth = billingMonth === 1 ? 12 : billingMonth - 1;
-    const prevYear = billingMonth === 1 ? billingYear - 1 : billingYear;
-    const prevBillingPeriod = `${prevYear}-${String(prevMonth).padStart(2, '0')}`;
-
-    const prevSummary = await FinopsCostSummary.findOne({
-      where: {
-        project_id: projectId,
-        billing_period: prevBillingPeriod,
-      },
-      transaction: t,
-    });
-
-    const previousMonthTotalCost = prevSummary?.total_cost || 0;
-    const previousSamePeriodCost = prevSummary?.previous_same_period_cost || 0;
-
-    // finops_cost_summaryにupsert
-    await FinopsCostSummary.upsert(
-      {
-        project_id: projectId,
-        billing_period: billingPeriod,
-        currency: currencyCode,
-        total_cost: calculatedTotalCost,
-        forecast_cost: forecastCost,
-        previous_same_period_cost: previousSamePeriodCost,
-        previous_month_total_cost: previousMonthTotalCost,
-        last_updated_at: now,
-      },
-      { transaction: t }
-    );
-
+  await saveCurAggregatedCostsForCurBatch({
+    projectId,
+    billingPeriod,
+    billingYear,
+    billingMonth,
+    currencyCode,
+    serviceCosts,
+    dailyCosts,
   });
+
+  const calculatedTotalCost = Object.values(serviceCosts).reduce((sum, cost) => sum + cost, 0);
 
   logInfo('[Batch B] コスト集計完了', {
     projectId,
@@ -560,16 +467,7 @@ export async function runCurAggregateBatch(options: CurBatchOptions = {}): Promi
 
   try {
     // PENDINGファイルを取得（上限100件）
-    const whereCondition: Record<string, string> = { status: 'PENDING' };
-    if (projectId) {
-      whereCondition.project_id = projectId;
-    }
-
-    const pendingFiles = await FinopsBillingFile.findAll({
-      where: whereCondition,
-      limit: 100,
-      order: [['created_at', 'ASC']],
-    });
+    const pendingFiles = await findPendingBillingFilesForCurBatch(projectId, 100);
 
     if (pendingFiles.length === 0) {
       logInfo('[Batch B] 処理対象ファイルなし', { projectId });
@@ -581,26 +479,16 @@ export async function runCurAggregateBatch(options: CurBatchOptions = {}): Promi
     for (const file of pendingFiles) {
       try {
         // PROCESSINGに更新（ロック）
-        const [updatedCount] = await FinopsBillingFile.update(
-          { status: 'PROCESSING' },
-          {
-            where: {
-              id: file.id,
-              status: 'PENDING', // 早い者勝ちでロック
-            },
-          }
-        );
+        const locked = await lockBillingFileAsProcessingForCurBatch(file.id);
 
-        if (updatedCount === 0) {
+        if (!locked) {
           // 他のWorkerに奪われた
           logInfo('[Batch B] ファイルは他のWorkerに処理中', { fileId: file.id });
           continue;
         }
 
         // S3からファイルをダウンロード
-        const connection = await FinopsProjectConnection.findOne({
-          where: { project_id: file.project_id },
-        });
+        const connection = await findProjectConnectionByProjectIdForCurBatch(file.project_id);
 
         if (!connection) {
           throw new Error(`接続設定が見つかりません: projectId=${file.project_id}`);
@@ -661,10 +549,7 @@ export async function runCurAggregateBatch(options: CurBatchOptions = {}): Promi
         );
 
         // ステータスをDONEに更新
-        await FinopsBillingFile.update(
-          { status: 'DONE' },
-          { where: { id: file.id } }
-        );
+        await updateBillingFileStatusToDoneForCurBatch(file.id);
 
         logInfo('[Batch B] ファイル処理完了', {
           fileId: file.id,
@@ -681,13 +566,7 @@ export async function runCurAggregateBatch(options: CurBatchOptions = {}): Promi
         const errorStack = error instanceof Error ? error.stack : undefined;
 
         // エラー時はERRORステータスに更新
-        await FinopsBillingFile.update(
-          {
-            status: 'ERROR',
-            error_message: errorMessage,
-          },
-          { where: { id: file.id } }
-        );
+        await updateBillingFileStatusToErrorForCurBatch(file.id, errorMessage);
 
         logError('[Batch B] ファイル処理エラー', {
           fileId: file.id,
