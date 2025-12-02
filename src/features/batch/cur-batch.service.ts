@@ -13,6 +13,7 @@ import FinopsProjectConnection from '../../models/finops-project-connection';
 import FinopsBillingFile from '../../models/finops-billing-file';
 import FinopsCostSummary from '../../models/finops-cost-summary';
 import FinopsCostServiceMonthly from '../../models/finops-cost-service-monthly';
+import { sequelize } from '../../shared/database/connection';
 import { enqueueCurAggregateJob } from './cur-batch.queue';
 import { getSecureParameter } from '../../shared/aws/parameter-store';
 import { createCurS3Client, listCurFiles, downloadAndDecompressCurFile } from '../../shared/aws/cur-s3-operations';
@@ -449,79 +450,98 @@ async function aggregateAndSaveCosts(
   // サービス別コストの合計を計算
   const calculatedTotalCost = Object.values(serviceCosts).reduce((sum, cost) => sum + cost, 0);
 
-  // finops_cost_service_monthlyにupsert（先にサービス別コストを保存）
-  for (const [serviceName, cost] of Object.entries(serviceCosts)) {
-    await FinopsCostServiceMonthly.upsert({
+  await sequelize.transaction(async (t) => {
+    // 対象プロジェクト・対象月のサービス別コストを一括削除
+    await FinopsCostServiceMonthly.destroy({
+      where: {
+        project_id: projectId,
+        billing_period: billingPeriod,
+      },
+      transaction: t,
+    });
+
+    // finops_cost_service_monthlyに一括INSERT
+    const now = new Date();
+    const serviceRows = Object.entries(serviceCosts).map(([serviceName, cost]) => ({
       project_id: projectId,
       billing_period: billingPeriod,
       service_name: serviceName,
       currency: currencyCode,
-      cost: cost,
-      last_updated_at: new Date(),
+      cost,
+      last_updated_at: now,
+    }));
+
+    if (serviceRows.length > 0) {
+      await FinopsCostServiceMonthly.bulkCreate(serviceRows, { transaction: t });
+    }
+
+    // 既存のサマリーを取得
+    const existingSummary = await FinopsCostSummary.findOne({
+      where: {
+        project_id: projectId,
+        billing_period: billingPeriod,
+      },
+      transaction: t,
     });
-  }
 
-  // 既存のサマリーを取得
-  const existingSummary = await FinopsCostSummary.findOne({
-    where: {
-      project_id: projectId,
-      billing_period: billingPeriod,
-    },
-  });
+    // 予測コストを計算（本日までの平均日次コスト × 当月の日数）
+    const today = new Date();
+    const currentYear = today.getFullYear();
+    const currentMonth = today.getMonth() + 1;
+    const isCurrentMonth = billingYear === currentYear && billingMonth === currentMonth;
 
-  // 予測コストを計算（本日までの平均日次コスト × 当月の日数）
-  const today = new Date();
-  const currentYear = today.getFullYear();
-  const currentMonth = today.getMonth() + 1;
-  const isCurrentMonth = billingYear === currentYear && billingMonth === currentMonth;
-
-  let forecastCost = calculatedTotalCost;
-  if (isCurrentMonth) {
-    const daysInMonth = new Date(billingYear, billingMonth, 0).getDate();
-    const daysSoFar = Object.keys(dailyCosts).length;
-    if (daysSoFar > 0) {
-      const avgDailyCost = calculatedTotalCost / daysSoFar;
-      forecastCost = avgDailyCost * daysInMonth;
+    let forecastCost = calculatedTotalCost;
+    if (isCurrentMonth) {
+      const daysInMonth = new Date(billingYear, billingMonth, 0).getDate();
+      const daysSoFar = Object.keys(dailyCosts).length;
+      if (daysSoFar > 0) {
+        const avgDailyCost = calculatedTotalCost / daysSoFar;
+        forecastCost = avgDailyCost * daysInMonth;
+      } else if (existingSummary) {
+        forecastCost = Number(existingSummary.forecast_cost) || calculatedTotalCost;
+      }
     } else if (existingSummary) {
+      // 過去月の場合は既存の予測コストを維持
       forecastCost = Number(existingSummary.forecast_cost) || calculatedTotalCost;
     }
-  } else if (existingSummary) {
-    // 過去月の場合は既存の予測コストを維持
-    forecastCost = Number(existingSummary.forecast_cost) || calculatedTotalCost;
-  }
 
-  // 前月のデータを取得
-  const prevMonth = billingMonth === 1 ? 12 : billingMonth - 1;
-  const prevYear = billingMonth === 1 ? billingYear - 1 : billingYear;
-  const prevBillingPeriod = `${prevYear}-${String(prevMonth).padStart(2, '0')}`;
+    // 前月のデータを取得
+    const prevMonth = billingMonth === 1 ? 12 : billingMonth - 1;
+    const prevYear = billingMonth === 1 ? billingYear - 1 : billingYear;
+    const prevBillingPeriod = `${prevYear}-${String(prevMonth).padStart(2, '0')}`;
 
-  const prevSummary = await FinopsCostSummary.findOne({
-    where: {
-      project_id: projectId,
-      billing_period: prevBillingPeriod,
-    },
-  });
+    const prevSummary = await FinopsCostSummary.findOne({
+      where: {
+        project_id: projectId,
+        billing_period: prevBillingPeriod,
+      },
+      transaction: t,
+    });
 
-  const previousMonthTotalCost = prevSummary?.total_cost || 0;
-  const previousSamePeriodCost = prevSummary?.previous_same_period_cost || 0;
+    const previousMonthTotalCost = prevSummary?.total_cost || 0;
+    const previousSamePeriodCost = prevSummary?.previous_same_period_cost || 0;
 
-  // finops_cost_summaryにupsert
-  await FinopsCostSummary.upsert({
-    project_id: projectId,
-    billing_period: billingPeriod,
-    currency: currencyCode,
-    total_cost: calculatedTotalCost,
-    forecast_cost: forecastCost,
-    previous_same_period_cost: previousSamePeriodCost,
-    previous_month_total_cost: previousMonthTotalCost,
-    last_updated_at: new Date(),
+    // finops_cost_summaryにupsert
+    await FinopsCostSummary.upsert(
+      {
+        project_id: projectId,
+        billing_period: billingPeriod,
+        currency: currencyCode,
+        total_cost: calculatedTotalCost,
+        forecast_cost: forecastCost,
+        previous_same_period_cost: previousSamePeriodCost,
+        previous_month_total_cost: previousMonthTotalCost,
+        last_updated_at: now,
+      },
+      { transaction: t }
+    );
+
   });
 
   logInfo('[Batch B] コスト集計完了', {
     projectId,
     billingPeriod,
     totalCost: calculatedTotalCost,
-    forecastCost,
     serviceCount: Object.keys(serviceCosts).length,
   });
 }
