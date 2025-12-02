@@ -1,42 +1,80 @@
 import express, { Router } from 'express';
+import { Op } from 'sequelize';
 import FinopsCostSummary from '../../../models/finops-cost-summary';
 import FinopsCostServiceMonthly from '../../../models/finops-cost-service-monthly';
 import { logError } from '../../../shared/logger';
+import { requireS2SAuth } from '../../../shared/auth/s2s-jwt.middleware';
 
 const router = Router();
+
+/**
+ * 現在の月から8ヶ月前まで（8ヶ月分）の月リストを生成
+ */
+function generateLast8Months(): string[] {
+  const now = new Date();
+  const currentYear = now.getFullYear();
+  const currentMonth = now.getMonth() + 1; // 1-12
+
+  const months: string[] = [];
+  // 現在の月から8ヶ月前まで（現在の月を含む）
+  for (let i = 0; i < 8; i++) {
+    const targetDate = new Date(currentYear, currentMonth - 1 - i, 1);
+    const year = targetDate.getFullYear();
+    const month = targetDate.getMonth() + 1;
+    months.unshift(`${year}-${String(month).padStart(2, '0')}`);
+  }
+  return months;
+}
 
 /**
  * GET /finops/projects/:projectId/dashboard/summary
  * 月次サマリ情報を取得
  */
-router.get('/projects/:projectId/dashboard/summary', async (req: express.Request, res: express.Response) => {
+router.get('/projects/:projectId/dashboard/summary', requireS2SAuth, async (req: express.Request, res: express.Response) => {
   const { projectId } = req.params;
 
   try {
-    // 最新のbillingPeriodを取得
-    const latestSummary = await FinopsCostSummary.findOne({
-      where: { project_id: projectId },
-      order: [['billing_period', 'DESC']],
+    // 実際の当月を取得
+    const now = new Date();
+    const currentYear = now.getFullYear();
+    const currentMonth = now.getMonth() + 1; // 1-12
+    const currentBillingPeriod = `${currentYear}-${String(currentMonth).padStart(2, '0')}`;
+
+    // 当月のサマリを取得
+    const currentSummary = await FinopsCostSummary.findOne({
+      where: {
+        project_id: projectId,
+        billing_period: currentBillingPeriod,
+      },
     });
 
-    if (!latestSummary) {
-      return res.status(404).json({
-        error: 'NOT_FOUND',
-        message: 'コストデータが見つかりません',
+    // 当月のデータがない場合は空のレスポンスを返す
+    if (!currentSummary) {
+      return res.json({
+        projectId,
+        billingPeriod: currentBillingPeriod,
+        totalCost: 0,
+        executedActionsCount: 0,
+        optimizationProposalsCount: 0,
+        forecastCost: 0,
+        previousSamePeriodCost: 0,
+        previousMonthTotalCost: 0,
+        costReducedByActions: 0,
+        lastUpdatedAt: new Date().toISOString(),
       });
     }
 
     res.json({
-      projectId: latestSummary.project_id,
-      billingPeriod: latestSummary.billing_period,
-      totalCost: Number(latestSummary.total_cost),
+      projectId: currentSummary.project_id,
+      billingPeriod: currentSummary.billing_period,
+      totalCost: Number(currentSummary.total_cost),
       executedActionsCount: 0, // MVPでは固定値
       optimizationProposalsCount: 0, // MVPでは固定値
-      forecastCost: Number(latestSummary.forecast_cost),
-      previousSamePeriodCost: Number(latestSummary.previous_same_period_cost),
-      previousMonthTotalCost: Number(latestSummary.previous_month_total_cost),
+      forecastCost: Number(currentSummary.forecast_cost),
+      previousSamePeriodCost: Number(currentSummary.previous_same_period_cost),
+      previousMonthTotalCost: Number(currentSummary.previous_month_total_cost),
       costReducedByActions: 0, // MVPでは固定値
-      lastUpdatedAt: latestSummary.last_updated_at.toISOString(),
+      lastUpdatedAt: currentSummary.last_updated_at.toISOString(),
     });
   } catch (error) {
     logError('[cost-dashboard] summary取得エラー', { projectId, error });
@@ -51,29 +89,26 @@ router.get('/projects/:projectId/dashboard/summary', async (req: express.Request
  * GET /finops/projects/:projectId/dashboard/services-monthly
  * サービス別月次コストを取得
  */
-router.get('/projects/:projectId/dashboard/services-monthly', async (req: express.Request, res: express.Response) => {
+router.get('/projects/:projectId/dashboard/services-monthly', requireS2SAuth, async (req: express.Request, res: express.Response) => {
   const { projectId } = req.params;
 
   try {
-    // 全期間のサービス別データを取得
+    // 過去8ヶ月分の月リストを生成
+    const targetMonths = generateLast8Months();
+
+    // 過去8ヶ月分のサービス別データを取得
     const serviceMonthlyData = await FinopsCostServiceMonthly.findAll({
-      where: { project_id: projectId },
+      where: {
+        project_id: projectId,
+        billing_period: {
+          [Op.in]: targetMonths,
+        },
+      },
       order: [['billing_period', 'ASC']],
     });
 
-    if (serviceMonthlyData.length === 0) {
-      return res.status(404).json({
-        error: 'NOT_FOUND',
-        message: 'コストデータが見つかりません',
-      });
-    }
-
-    // 月の一覧を取得（重複除去・ソート）
-    const monthsSet = new Set<string>();
-    serviceMonthlyData.forEach((d) => {
-      if (d.billing_period) monthsSet.add(d.billing_period);
-    });
-    const months = Array.from(monthsSet).sort();
+    // 月の一覧は常に過去8ヶ月分を返す（データがない場合でも）
+    const months = targetMonths;
 
     // サービス名の一覧を取得
     const serviceNamesSet = new Set<string>();
@@ -83,6 +118,7 @@ router.get('/projects/:projectId/dashboard/services-monthly', async (req: expres
     const serviceNames = Array.from(serviceNamesSet).sort();
 
     // サービス別に月次コストを集計
+    // データがない月でも、過去8ヶ月分のコスト配列を返す（データがない月は0）
     const services = serviceNames.map((serviceName) => {
       const costs = months.map((month) => {
         const data = serviceMonthlyData.find(
@@ -96,6 +132,7 @@ router.get('/projects/:projectId/dashboard/services-monthly', async (req: expres
       };
     });
 
+    // データがない場合でも、過去8ヶ月分の月リストと空のservices配列を返す
     res.json({
       projectId,
       months,
@@ -103,9 +140,13 @@ router.get('/projects/:projectId/dashboard/services-monthly', async (req: expres
     });
   } catch (error) {
     logError('[cost-dashboard] services-monthly取得エラー', { projectId, error });
+    const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+    const errorStack = error instanceof Error ? error.stack : undefined;
     res.status(500).json({
       error: 'INTERNAL_ERROR',
       message: 'サーバーエラーが発生しました',
+      details: errorMessage,
+      ...(process.env.NODE_ENV === 'development' && { stack: errorStack }),
     });
   }
 });
@@ -114,29 +155,26 @@ router.get('/projects/:projectId/dashboard/services-monthly', async (req: expres
  * GET /finops/projects/:projectId/dashboard/history
  * 履歴データを取得（services-monthlyと同じデータを異なる形式で返す）
  */
-router.get('/projects/:projectId/dashboard/history', async (req: express.Request, res: express.Response) => {
+router.get('/projects/:projectId/dashboard/history', requireS2SAuth, async (req: express.Request, res: express.Response) => {
   const { projectId } = req.params;
 
   try {
-    // services-monthlyと同じロジックでデータを取得
+    // 過去8ヶ月分の月リストを生成
+    const targetMonths = generateLast8Months();
+
+    // 過去8ヶ月分のサービス別データを取得
     const serviceMonthlyData = await FinopsCostServiceMonthly.findAll({
-      where: { project_id: projectId },
+      where: {
+        project_id: projectId,
+        billing_period: {
+          [Op.in]: targetMonths,
+        },
+      },
       order: [['billing_period', 'ASC']],
     });
 
-    if (serviceMonthlyData.length === 0) {
-      return res.status(404).json({
-        error: 'NOT_FOUND',
-        message: 'コストデータが見つかりません',
-      });
-    }
-
-    // 月の一覧を取得
-    const monthsSet = new Set<string>();
-    serviceMonthlyData.forEach((d) => {
-      if (d.billing_period) monthsSet.add(d.billing_period);
-    });
-    const months = Array.from(monthsSet).sort();
+    // 月の一覧は常に過去8ヶ月分を返す
+    const months = targetMonths;
 
     // サービス名の一覧を取得
     const serviceNamesSet = new Set<string>();
@@ -166,9 +204,13 @@ router.get('/projects/:projectId/dashboard/history', async (req: express.Request
     });
   } catch (error) {
     logError('[cost-dashboard] history取得エラー', { projectId, error });
+    const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+    const errorStack = error instanceof Error ? error.stack : undefined;
     res.status(500).json({
       error: 'INTERNAL_ERROR',
       message: 'サーバーエラーが発生しました',
+      details: errorMessage,
+      ...(process.env.NODE_ENV === 'development' && { stack: errorStack }),
     });
   }
 });
