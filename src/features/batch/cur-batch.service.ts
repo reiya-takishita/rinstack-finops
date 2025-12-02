@@ -329,18 +329,21 @@ async function aggregateAndSaveCosts(
   const usageStartDateIdx = headerMap[CUR_COLUMN_MAPPING.USAGE_START_DATE];
   const unblendedCostIdx = headerMap[CUR_COLUMN_MAPPING.UNBLENDED_COST];
   const netUnblendedCostIdx = headerMap[CUR_COLUMN_MAPPING.NET_UNBLENDED_COST];
+  const currencyIdx = headerMap[CUR_COLUMN_MAPPING.CURRENCY_CODE];
   const productIdx = headerMap[CUR_COLUMN_MAPPING.PRODUCT];
+  const productServiceCodeIdx = headerMap[CUR_COLUMN_MAPPING.PRODUCT_SERVICECODE];
   const productCodeIdx = headerMap[CUR_COLUMN_MAPPING.PRODUCT_CODE];
 
-  if (usageStartDateIdx === undefined || unblendedCostIdx === undefined) {
+  if (usageStartDateIdx === undefined || unblendedCostIdx === undefined || currencyIdx === undefined) {
     const missingColumns = [];
     if (usageStartDateIdx === undefined) missingColumns.push(CUR_COLUMN_MAPPING.USAGE_START_DATE);
     if (unblendedCostIdx === undefined) missingColumns.push(CUR_COLUMN_MAPPING.UNBLENDED_COST);
+    if (currencyIdx === undefined) missingColumns.push(CUR_COLUMN_MAPPING.CURRENCY_CODE);
     throw new Error(`必要なカラムが見つかりません: ${missingColumns.join(', ')}`);
   }
 
-  if (productIdx === undefined && productCodeIdx === undefined) {
-    throw new Error('productカラムまたはproduct_codeカラムが見つかりません');
+  if (productIdx === undefined && productServiceCodeIdx === undefined && productCodeIdx === undefined) {
+    throw new Error('productカラムまたはproduct_servicecodeカラムまたはproduct_codeカラムが見つかりません');
   }
 
   const [year, month] = billingPeriod.split('-');
@@ -361,6 +364,7 @@ async function aggregateAndSaveCosts(
     serviceCosts[existing.service_name] = Number(existing.cost) || 0;
   }
   const dailyCosts: Record<string, number> = {}; // 日別コスト（予測用）
+  let currencyCode = '';
 
   // データ行を処理（ヘッダーを除く）
   for (let i = 1; i < lines.length; i++) {
@@ -374,11 +378,17 @@ async function aggregateAndSaveCosts(
       unblendedCostIdx,
       netUnblendedCostIdx !== undefined ? netUnblendedCostIdx : -1,
       productIdx !== undefined ? productIdx : -1,
+      productServiceCodeIdx !== undefined ? productServiceCodeIdx : -1,
       productCodeIdx !== undefined ? productCodeIdx : -1
     );
 
     if (values.length <= maxIdx) {
       continue; // カラム数が足りない行をスキップ
+    }
+
+    // 通貨コードを取得（ファイル内で一貫している想定）
+    if (!currencyCode && currencyIdx !== undefined && values.length > currencyIdx) {
+      currencyCode = values[currencyIdx].replace(/^"|"$/g, '').trim();
     }
 
     // コストを取得（スクリプトと同じロジック）
@@ -392,6 +402,9 @@ async function aggregateAndSaveCosts(
     let serviceName = '';
     if (productIdx !== undefined && values[productIdx]) {
       serviceName = parseProductName(values[productIdx]);
+    }
+    if (!serviceName && productServiceCodeIdx !== undefined && values[productServiceCodeIdx]) {
+      serviceName = values[productServiceCodeIdx].replace(/^"|"$/g, '').trim();
     }
     if (!serviceName && productCodeIdx !== undefined && values[productCodeIdx]) {
       serviceName = values[productCodeIdx].replace(/^"|"$/g, '').trim();
@@ -442,6 +455,7 @@ async function aggregateAndSaveCosts(
       project_id: projectId,
       billing_period: billingPeriod,
       service_name: serviceName,
+      currency: currencyCode,
       cost: cost,
       last_updated_at: new Date(),
     });
@@ -495,6 +509,7 @@ async function aggregateAndSaveCosts(
   await FinopsCostSummary.upsert({
     project_id: projectId,
     billing_period: billingPeriod,
+    currency: currencyCode,
     total_cost: calculatedTotalCost,
     forecast_cost: forecastCost,
     previous_same_period_cost: previousSamePeriodCost,

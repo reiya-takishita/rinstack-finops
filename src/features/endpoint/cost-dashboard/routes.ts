@@ -2,6 +2,7 @@ import express, { Router } from 'express';
 import FinopsCostSummary from '../../../models/finops-cost-summary';
 import FinopsCostServiceMonthly from '../../../models/finops-cost-service-monthly';
 import { logError } from '../../../shared/logger';
+import { getCurrencyConversionContext } from '../../../shared/currency';
 
 const router = Router();
 
@@ -26,16 +27,27 @@ router.get('/projects/:projectId/dashboard/summary', async (req: express.Request
       });
     }
 
+    // 言語に応じた通貨変換コンテキストを取得
+    const lang = 'ja'; // TODO: 言語設定を考慮する
+    const baseCurrency = latestSummary.currency as string;
+    const { displayCurrency, rate } = getCurrencyConversionContext(baseCurrency, lang);
+
+    const totalCost = Number(latestSummary.total_cost) * rate;
+    const forecastCost = Number(latestSummary.forecast_cost) * rate;
+    const previousSamePeriodCost = Number(latestSummary.previous_same_period_cost) * rate;
+    const previousMonthTotalCost = Number(latestSummary.previous_month_total_cost) * rate;
+
     res.json({
       projectId: latestSummary.project_id,
       billingPeriod: latestSummary.billing_period,
-      totalCost: Number(latestSummary.total_cost),
-      executedActionsCount: 0, // MVPでは固定値
-      optimizationProposalsCount: 0, // MVPでは固定値
-      forecastCost: Number(latestSummary.forecast_cost),
-      previousSamePeriodCost: Number(latestSummary.previous_same_period_cost),
-      previousMonthTotalCost: Number(latestSummary.previous_month_total_cost),
-      costReducedByActions: 0, // MVPでは固定値
+      currency: displayCurrency,
+      totalCost,
+      executedActionsCount: 0,
+      optimizationProposalsCount: 0,
+      forecastCost,
+      previousSamePeriodCost,
+      previousMonthTotalCost,
+      costReducedByActions: 0,
       lastUpdatedAt: latestSummary.last_updated_at.toISOString(),
     });
   } catch (error) {
@@ -82,13 +94,18 @@ router.get('/projects/:projectId/dashboard/services-monthly', async (req: expres
     });
     const serviceNames = Array.from(serviceNamesSet).sort();
 
+    // 言語に応じた通貨変換コンテキストを取得
+    const lang = 'ja'; // TODO: 言語設定を考慮する
+    const baseCurrency = serviceMonthlyData[0].currency as string;
+    const { displayCurrency, rate } = getCurrencyConversionContext(baseCurrency, lang);
+
     // サービス別に月次コストを集計
     const services = serviceNames.map((serviceName) => {
       const costs = months.map((month) => {
         const data = serviceMonthlyData.find(
           (d) => d.billing_period === month && d.service_name === serviceName
         );
-        return data ? Number(data.cost) : 0;
+        return data ? Number(data.cost) * rate : 0;
       });
       return {
         serviceName,
@@ -99,6 +116,7 @@ router.get('/projects/:projectId/dashboard/services-monthly', async (req: expres
     res.json({
       projectId,
       months,
+      currency: displayCurrency,
       services,
     });
   } catch (error) {
@@ -145,13 +163,19 @@ router.get('/projects/:projectId/dashboard/history', async (req: express.Request
     });
     const serviceNames = Array.from(serviceNamesSet).sort();
 
+    // 言語に応じた通貨変換コンテキストを取得
+    const lang = 'ja'; // TODO: 言語設定を考慮する
+
+    const baseCurrency = serviceMonthlyData[0].currency as string;
+    const { displayCurrency, rate } = getCurrencyConversionContext(baseCurrency, lang);
+
     // 履歴形式に変換
     const rows = serviceNames.map((serviceName) => {
       const monthlyCosts = months.map((month) => {
         const data = serviceMonthlyData.find(
           (d) => d.billing_period === month && d.service_name === serviceName
         );
-        return data ? Number(data.cost) : 0;
+        return data ? Number(data.cost) * rate : 0;
       });
       return {
         serviceName,
@@ -162,6 +186,7 @@ router.get('/projects/:projectId/dashboard/history', async (req: express.Request
     res.json({
       projectId,
       months,
+      currency: displayCurrency,
       rows,
     });
   } catch (error) {

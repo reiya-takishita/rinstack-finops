@@ -10,6 +10,7 @@ interface FinopsCostServiceMonthlyAttributes {
   billing_period: string;
   service_name: string;
   cost: number;
+  currency: string;
   last_updated_at?: Date;
 }
 
@@ -23,6 +24,7 @@ class FinopsCostServiceMonthly
   declare billing_period: string;
   declare service_name: string;
   declare cost: number;
+  declare currency: string;
   declare last_updated_at: Date;
 }
 
@@ -39,6 +41,11 @@ FinopsCostServiceMonthly.init(
       allowNull: false,
       primaryKey: true,
       comment: '対象月（例：2025-11）',
+    },
+    currency: {
+      type: DataTypes.STRING(10),
+      allowNull: false,
+      comment: '通貨コード（例：USD）',
     },
     service_name: {
       type: DataTypes.STRING(255),

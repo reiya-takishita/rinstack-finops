@@ -15,6 +15,11 @@ module.exports = {
         primaryKey: true,
         comment: '対象月（例：2025-11）',
       },
+      currency: {
+        type: Sequelize.STRING(10),
+        allowNull: false,
+        comment: '通貨コード（例：USD）',
+      },
       service_name: {
         type: Sequelize.STRING(255),
         allowNull: false,

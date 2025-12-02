@@ -8,6 +8,7 @@ import { sequelize } from '../shared/database/connection';
 interface FinopsCostSummaryAttributes {
   project_id: string;
   billing_period: string;
+  currency: string;
   total_cost: number;
   forecast_cost: number;
   previous_same_period_cost: number;
@@ -23,6 +24,7 @@ class FinopsCostSummary
 {
   declare project_id: string;
   declare billing_period: string;
+  declare currency: string;
   declare total_cost: number;
   declare forecast_cost: number;
   declare previous_same_period_cost: number;
@@ -43,6 +45,11 @@ FinopsCostSummary.init(
       allowNull: false,
       primaryKey: true,
       comment: '対象月（例：2025-11）',
+    },
+    currency: {
+      type: DataTypes.STRING(10),
+      allowNull: false,
+      comment: '通貨コード（例：USD）',
     },
     total_cost: {
       type: DataTypes.DECIMAL(15, 2),
