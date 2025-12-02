@@ -189,7 +189,8 @@ router.get('/projects/:projectId/dashboard/history', requireS2SAuth, async (req:
         const data = serviceMonthlyData.find(
           (d) => d.billing_period === month && d.service_name === serviceName
         );
-        return data ? Number(data.cost) : 0;
+        // データがない場合はnull、データがある場合はコスト値（0円も含む）
+        return data ? Number(data.cost) : null;
       });
       return {
         serviceName,
