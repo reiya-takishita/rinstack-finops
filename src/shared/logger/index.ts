@@ -20,4 +20,4 @@ export {
   createErrorFactory,
 } from './error-factory';
 
-export { default } from './logger'; 
+export { default } from './logger';

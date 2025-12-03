@@ -15,4 +15,4 @@ export const getEnvVariable = (key: string): string => {
 // 環境変数取得関数（デフォルト値付き）
 export const getEnvVariableWithDefault = (key: string, defaultValue: string): string => {
   return process.env[key] || defaultValue;
-};  
+};

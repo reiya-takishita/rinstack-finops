@@ -4,8 +4,7 @@ import { logInfo, logError } from '../logger';
 // MASTER DATA MANAGEMENT
 // =============================================================================
 
-export interface MasterData {
-}
+export type MasterData = Record<string, never>;
 
 // マスタデータを取得用設定
 export const getMasterData = async (): Promise<MasterData> => {

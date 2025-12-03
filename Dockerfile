@@ -1,7 +1,7 @@
 FROM node:22.0-alpine
 ENV TZ=Asia/Tokyo
 
-WORKDIR /rinstack_base
+WORKDIR /rinstack_finops
 
 # disable npm update check
 ENV NO_UPDATE_NOTIFIER true
@@ -22,7 +22,7 @@ RUN pnpm install
 COPY . .
 
 RUN chmod +x docker/entrypoint.sh
-ENTRYPOINT ["/rinstack_base/docker/entrypoint.sh"]
+ENTRYPOINT ["/rinstack_finops/docker/entrypoint.sh"]
 
 EXPOSE 7070
 

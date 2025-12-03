@@ -1,23 +1,25 @@
 version: "3.9"
 
 services:
-  app:
+  finops-app:
     platform: linux/amd64
     build:
       context: .
       dockerfile: Dockerfile
     volumes:
-      - .:/rinstack_base
+      - .:/rinstack_finops
     ports:
-      - "7070:7070"
+      - "7071:7070"
     networks:
       - shared_network
-    container_name: backend-rinstack-base
+    depends_on:
+      - finops-mysql
+    container_name: backend-rinstack-finops
     command: ["sh", "-c", "pnpm install --frozen-lockfile && pnpm dev"]
     env_file:
       - .env
     environment:
-      - REDIS_HOST=redis
+      - REDIS_HOST=finops-redis
       - REDIS_PORT=6379
       - NODE_OPTIONS=--max-old-space-size=8192
     entrypoint: ["sh", "docker/entrypoint.sh"]
@@ -28,12 +30,12 @@ services:
         reservations:
           memory: 12G
       
-  mysql:
+  finops-mysql:
     platform: linux/amd64
     image: mysql:8.0.27
     restart: always
     ports:
-      - "23306:3306"
+      - "23307:3306"
     environment:
       MYSQL_ROOT_PASSWORD: ${DB_ROOT_PASSWORD}
       MYSQL_DATABASE: ${DB_NAME}
@@ -46,14 +48,14 @@ services:
     networks:
       - shared_network
 
-  phpmyadmin:
+  finops-phpmyadmin:
     platform: linux/amd64
     image: phpmyadmin:5
     restart: always
     depends_on:
-      - mysql
+      - finops-mysql
     ports:
-      - '3001:80'
+      - '3002:80'
     environment:
       PMA_ARBITRARY: 1
       PMA_HOSTS: ${DB_HOST}
@@ -63,11 +65,11 @@ services:
     networks:
       - shared_network
 
-  redis:
+  finops-redis:
     image: redis:7-alpine
-    container_name: rinstack-redis
+    container_name: rinstack-finops-redis
     ports:
-      - "6379:6379"
+      - "6380:6379"
     volumes:
       - redis-data:/data
     command: redis-server --appendonly yes

@@ -23,3 +23,7 @@ tmp
 outputs/
 dist/
 coverage/
+
+# Large CUR sample files (exceed GitHub 100MB limit)
+docs/s3_mock/*.csv
+docs/s3_mock/*.csv.bak

@@ -55,4 +55,4 @@ export const createErrorFactory = (logger: Logger) => {
       return error;
     },
   };
-}; 
+};
