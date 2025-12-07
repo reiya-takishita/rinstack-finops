@@ -23,7 +23,6 @@ async function query(sequelize, sql, replacements) {
 
 function mapType(mysqlTypeRaw) {
   const raw = String(mysqlTypeRaw || '').trim();
-  const t = raw.toUpperCase();
 
   // ENUM('a','b') → Sequelize.ENUM('a','b')（値の大小は元のまま）
   if (/^ENUM\(/i.test(raw)) {
@@ -262,7 +261,7 @@ async function main() {
 
   const host = process.env.DB_HOST || 'mysql';
   const port = Number(process.env.DB_PORT || 3306);
-  const database = process.env.DB_NAME || 'rinstack_db';
+  const database = process.env.DB_NAME || 'rinstack_finops_db';
   const username = process.env.DB_USER || 'rinstack_user';
   const password = process.env.DB_PASS || 'rinstack_p@ssw0rd';
 
@@ -287,7 +286,7 @@ async function main() {
       const filePath = path.join(OUT_DIR, fileName);
       const content = renderCreateTableFile(table, columns, indexes);
       fs.writeFileSync(filePath, content);
-      // eslint-disable-next-line no-console
+       
       console.log('Generated', path.relative(PROJECT_ROOT, filePath));
     }
 
@@ -295,7 +294,7 @@ async function main() {
     const fkFileName = `${stamp(base, i++)}-add-foreign-keys.js`;
     const fkPath = path.join(OUT_DIR, fkFileName);
     fs.writeFileSync(fkPath, renderFkFile(fks));
-    // eslint-disable-next-line no-console
+     
     console.log('Generated', path.relative(PROJECT_ROOT, fkPath));
   } finally {
     await sequelize.close();
@@ -303,7 +302,7 @@ async function main() {
 }
 
 main().catch(err => {
-  // eslint-disable-next-line no-console
+   
   console.error(err);
   process.exit(1);
 });

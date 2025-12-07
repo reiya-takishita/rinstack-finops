@@ -1,12 +1,10 @@
-import express from 'express';
+import { Router } from 'express';
+import awsConnectionRoutes from '../features/endpoint/aws-connection/routes';
+import costDashboardRoutes from '../features/endpoint/cost-dashboard/routes';
 
-const router = express.Router();
+const router = Router();
 
-// ベースリポジトリ用の最小ルーター
-// 各 rinstack-* プロジェクトはここに機能別ルーターをマウントしていく
-
-router.get('/health', (_req: express.Request, res: express.Response) => {
-  res.json({ status: 'ok' });
-});
+router.use('/finops', awsConnectionRoutes);
+router.use('/finops', costDashboardRoutes);
 
 export default router;

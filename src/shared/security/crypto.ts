@@ -106,4 +106,4 @@ class CryptUtils {
 }
 
 // シングルトンインスタンス
-export const cryptUtils = new CryptUtils(); 
+export const cryptUtils = new CryptUtils();

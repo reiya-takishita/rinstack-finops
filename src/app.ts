@@ -7,6 +7,8 @@ import { checkConnection, initializeMasterData, sequelize } from './shared/datab
 import { initModels } from './models/init-models';
 import { logInfo } from './shared/logger';
 import { APP_CONFIG } from './shared/config';
+import { setupCurBatchSchedulers } from './features/batch/cur-batch.scheduler';
+import { startCurBatchWorker } from './features/batch/cur-batch.worker';
 
 const app = express();
 
@@ -32,7 +34,8 @@ const outputReqest = (req: express.Request, res: express.Response, next: express
   const originalSend = res.send;
 
   // res.send関数を新しい関数で置き換える
-  (res as any).send = function (body: any) {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  (res as any).send = function (body: unknown) {
 
     const loginfo = {
       request : {
@@ -64,8 +67,10 @@ app.use('/', router);
 
 
 // エラーハンドリング
-app.use((err: any, req: express.Request, res: express.Response, next: express.NextFunction) => {
-  console.error(err.stack);
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
+app.use((err: unknown, req: express.Request, res: express.Response, _next: express.NextFunction) => {
+  const error = err instanceof Error ? err : new Error(String(err));
+  console.error(error.stack);
   res.status(500).json({ error: 'Internal Server Error' });
 });
 
@@ -76,14 +81,41 @@ const startServer = async () => {
   try {
     // データベース接続確認
     await checkConnection();
-    
+
     // モデル初期化
     initModels(sequelize);
     logInfo('Database models initialized successfully.');
-    
+
     // マスターデータ初期化
     await initializeMasterData();
-    
+
+    // CURバッチワーカーの起動
+    try {
+      logInfo('Starting CUR batch worker...');
+      await startCurBatchWorker();
+      logInfo('CUR batch worker started successfully.');
+    } catch (error) {
+      console.error('Failed to start CUR batch worker:', error);
+      console.error('Error details:', error instanceof Error ? error.stack : String(error));
+      logInfo('Failed to start CUR batch worker (continuing without batch processing)', {
+        error: error instanceof Error ? error.message : String(error),
+        stack: error instanceof Error ? error.stack : undefined
+      });
+    }
+
+    // CURバッチスケジューラーの起動
+    try {
+      logInfo('Starting CUR batch scheduler...');
+      await setupCurBatchSchedulers();
+      logInfo('CUR batch scheduler started successfully.');
+    } catch (error) {
+      console.error('Failed to start CUR batch scheduler:', error);
+      logInfo('Failed to start CUR batch scheduler (continuing without batch scheduling)', {
+        error: error instanceof Error ? error.message : String(error),
+        stack: error instanceof Error ? error.stack : undefined
+      });
+    }
+
     app.listen(PORT, () => {
       logInfo(`Server is running on port ${PORT}`);
     });

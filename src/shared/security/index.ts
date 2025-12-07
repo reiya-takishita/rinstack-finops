@@ -1,1 +1,1 @@
-export { cryptUtils } from './crypto'; 
+export { cryptUtils } from './crypto';
